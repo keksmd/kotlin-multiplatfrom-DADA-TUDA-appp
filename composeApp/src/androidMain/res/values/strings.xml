@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">DADATUDA</string>
+
+    <string name="base_url">https://api.dada-tuda.ru</string>
+    <string name="auth_url">https://auth.dada-tuda.ru</string>
+    <string name="api_version">v1</string>
+    <!-- API Endpoints -->
+    <string name="url_get_categories">/api/v1/events/categories</string>
+    <string name="url_get_events">/api/v3/events/for</string>
+    <string name="url_get_event_by_id">/api/v1/events/{id}</string>
+    <string name="url_post_feedback">/api/%s/feedback</string>
+    <string name="url_shortlist" formatted="false">/api/v4/shortlist</string>
+    <string name="url_login_get_token" formatted="false">/realms/master/protocol/openid-connect/token</string>
+    <string name="url_register" formatted="false">/api/v2/users/register</string>
+    <string name="url_post_feedback_auth">/api/v3/feedback</string>
+</resources>
