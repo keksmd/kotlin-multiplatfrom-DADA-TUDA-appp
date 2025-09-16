@@ -42,6 +42,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.Surface
 import dadatuda.composeapp.generated.resources.Res
 import dadatuda.composeapp.generated.resources.dada_like_swipe
 import dadatuda.composeapp.generated.resources.tuda_dislike_swipe
@@ -67,6 +69,23 @@ private val TripleConverter = TwoWayConverter<Triple<Float, Float, Float>, Anima
 class SwipeableCardStackController {
     private var _swipeAction: ((SwipeDirection) -> Unit)? = null
     private var _undoAction: (() -> Unit)? = null
+    private var _currentIndex: Int = 0
+    private var _totalItems: Int = 0
+
+    /**
+     * Текущий индекс карточки в стопке
+     */
+    val currentIndex: Int get() = _currentIndex
+
+    /**
+     * Общее количество элементов в стопке
+     */
+    val totalItems: Int get() = _totalItems
+
+    /**
+     * Закончились ли карточки в стопке
+     */
+    val isStackFinished: Boolean get() = _currentIndex >= _totalItems
 
     internal fun setSwipeAction(action: (SwipeDirection) -> Unit) {
         _swipeAction = action
@@ -74,6 +93,11 @@ class SwipeableCardStackController {
 
     internal fun setUndoAction(action: () -> Unit) {
         _undoAction = action
+    }
+
+    internal fun updateIndex(newIndex: Int, totalItems: Int) {
+        _currentIndex = newIndex
+        _totalItems = totalItems
     }
 
     /**
@@ -128,7 +152,7 @@ fun <T> SwipeableCardStack(
     modifier: Modifier = Modifier,
     controller: SwipeableCardStackController? = null,
     maxVisibleCards: Int = 3,
-    swipeThreshold: Float = 300f,
+    swipeThreshold: Float = 150f,
     emptyMessage: String = "Нет больше карточек",
     cardContent: @Composable (T) -> Unit,
 ) {
@@ -139,6 +163,7 @@ fun <T> SwipeableCardStack(
 
     // Настройка контроллера для программного свайпа и возврата
     LaunchedEffect(controller, items) {
+        controller?.updateIndex(currentIndex, items.size)
         controller?.setSwipeAction { direction ->
             if (currentIndex < items.size) {
                 programmaticSwipeDirection = direction
@@ -210,20 +235,98 @@ fun <T> SwipeableCardStack(
 
         // Показать сообщение если карточки закончились
         if (currentIndex >= items.size) {
-            Card(
+            EmptyStateCard(
+                message = emptyMessage,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
+/**
+ * Кастомная карточка для отображения пустого состояния
+ */
+@Composable
+private fun EmptyStateCard(
+    message: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RectangleShape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            // Фоновая декорация - стопка прозрачных карточек
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(8.dp),
-                shape = RectangleShape
+                    .alpha(0.15f),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                repeat(4) { index ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxSize(0.9f - index * 0.08f)
+                            .alpha(0.3f - index * 0.06f),
+                        shape = RectangleShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                        )
+                    ) {}
+                }
+            }
+            
+            // Основной контент
+            Surface(
+                modifier = Modifier
+                    .padding(32.dp),
+                shape = RectangleShape,
+                color = Color.Transparent
+            ) {
+                androidx.compose.foundation.layout.Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
                 ) {
+                    // Эмодзи для визуального интереса
                     Text(
-                        text = emptyMessage,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "🎉",
+                        fontSize = 64.sp,
+                        modifier = Modifier.alpha(0.8f)
+                    )
+                    
+                    Text(
+                        text = message,
+                        fontSize = 22.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.headlineSmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.alpha(0.9f)
+                    )
+                    
+                    Text(
+                        text = "Возвращайтесь завтра за новыми мероприятиями",
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.alpha(0.7f)
                     )
                 }
             }
@@ -232,7 +335,7 @@ fun <T> SwipeableCardStack(
 }
 
 /**
- * Отдельная карточка в стопке с поддержкой свайпа
+ * Отдельная карточка в стопке с поддержкой свайпа по окружности
  */
 @Composable
 private fun SwipeableCard(
@@ -248,6 +351,9 @@ private fun SwipeableCard(
     var isDragging by remember { mutableStateOf(false) }
     var isRemoving by remember { mutableStateOf(false) }
     var programmaticTarget by remember { mutableStateOf<Offset?>(null) }
+
+    // Радиус окружности для ограничения движения
+    val circularRadius = 200f
 
     // Обработка программного свайпа - устанавливаем целевую позицию для анимации
     LaunchedEffect(programmaticSwipeDirection) {
@@ -266,9 +372,9 @@ private fun SwipeableCard(
     val density = LocalDensity.current
     val animatedOffset by animateOffsetAsState(
         targetValue = when {
-            isDragging -> offset
+            isDragging -> offset.copy(y = 0f)
             isRemoving && programmaticTarget != null -> programmaticTarget!!
-            isRemoving -> offset.copy(x = if (offset.x > 0) 1200f else -1200f, y = offset.y * 0.5f)
+            isRemoving -> offset.copy(x = if (offset.x > 0) 1200f else -1200f, y = 0f)
             else -> Offset.Zero
         },
         animationSpec = if (isRemoving) {
@@ -299,7 +405,7 @@ private fun SwipeableCard(
     val animatedStackProperties by animateValueAsState(
         targetValue = with(density) {
             Triple(
-                1f - (animatedCardIndex * 0.04f) + if (cardIndex == 0 && isDragging) -0.05f else 0f,
+                1f - (animatedCardIndex * 0.04f), // Убираем дополнительное уменьшение при перетаскивании
                 animatedCardIndex * 6f,
                 if (isDragging && cardIndex == 0) 12.dp.toPx() else 6.dp.toPx()
             )
@@ -331,10 +437,11 @@ private fun SwipeableCard(
             .graphicsLayer {
                 translationX = animatedOffset.x
                 translationY =
-                    animatedOffset.y + with(density) { animatedStackProperties.second.dp.toPx() }
-                rotationZ = animatedOffset.x * 0.08f
-                scaleX = animatedStackProperties.first
-                scaleY = animatedStackProperties.first
+                    animatedOffset.y
+//                + with(density) { animatedStackProperties.second.dp.toPx() }
+                rotationZ = animatedOffset.x * 0.03f // Увеличиваем угол поворота для большего отклонения
+//                scaleX = animatedStackProperties.first
+//                scaleY = animatedStackProperties.first
                 shadowElevation = animatedStackProperties.third
                 this.alpha = alpha
             }
@@ -351,7 +458,14 @@ private fun SwipeableCard(
                                     offset = Offset.Zero
                                 }
                             },
-                            onDrag = { _, dragAmount -> offset += dragAmount }
+                            onDrag = { _, dragAmount ->
+                                val newOffset = offset + dragAmount
+                                // Вычисляем Y координату на основе X для движения по дуге
+                                val arcY = calculateArcY(newOffset.x)
+                                val arcOffset = Offset(newOffset.x, arcY)
+                                // Ограничиваем движение по дуге
+                                offset = constrainToArc(arcOffset, circularRadius)
+                            }
                         )
                     }
                 } else {
@@ -400,10 +514,8 @@ private fun SwipeIndicators(
                     painterResource(Res.drawable.dada_like_swipe),
                     contentDescription = "Like",
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp)
                         .alpha(swipeProgress)
-                        .scale(0.8f + swipeProgress * 0.2f)
+                        .scale((0.6f + swipeProgress * 0.5f).coerceAtMost(1f))
                 )
             }
         }
@@ -427,16 +539,48 @@ private fun SwipeIndicators(
                     painterResource(Res.drawable.tuda_dislike_swipe),
                     contentDescription = "Dislike",
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp)
                         .alpha(swipeProgress)
-                        .scale(0.8f + swipeProgress * 0.2f)
+                        .scale((0.6f + swipeProgress * 0.5f).coerceAtMost(1f))
                 )
             }
         }
 
         else -> {}
     }
+}
+
+/**
+ * Вычисляет Y координату для движения по дуге на основе X координаты
+ * Использует параболическую формулу для создания естественной дуги
+ */
+private fun calculateArcY(x: Float, arcHeight: Float = 50f): Float {
+    // Параболическая формула: y = -a * x^2 / (width^2) * height
+    // где width - это примерная ширина дуги (600px - увеличено в 1.5 раза)
+    val arcWidth = 30f
+    val normalizedX = x / arcWidth
+    return -arcHeight * normalizedX * normalizedX * 4 // Умножаем на 4 для более выраженной дуги
+}
+
+/**
+ * Ограничивает позицию по дуге с заданным радиусом
+ * Карточка движется по параболической дуге вместо окружности
+ */
+private fun constrainToArc(offset: Offset, radius: Float): Offset {
+    val x = offset.x
+    
+    // Ограничиваем x в пределах радиуса
+    val constrainedX = when {
+        x > radius -> radius
+        x < -radius -> -radius
+        else -> x
+    }
+    
+    // Вычисляем y по параболической формуле: y = -(x²) / (2 * radius) + radius/4
+    // Это создает дугу, которая опускается вниз при движении влево/вправо
+    val normalizedX = constrainedX / radius * 2 // нормализуем x к диапазону [-1, 1]
+    val y = -(normalizedX * normalizedX) * radius * 0.5f + radius * 0.5f
+    
+    return Offset(constrainedX, y)
 }
 
 /**

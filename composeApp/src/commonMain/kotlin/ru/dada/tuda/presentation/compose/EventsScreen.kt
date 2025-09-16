@@ -98,6 +98,7 @@ import ru.dada.tuda.domain.http.models.event.MainViewModel
 import ru.dada.tuda.domain.http.models.feedback.FeedbackViewModel
 import ru.dada.tuda.domain.util.PlatformContext
 import ru.dada.tuda.domain.util.Resource
+import ru.dada.tuda.platform.openUrl
 import ru.dada.tuda.presentation.theme.BodyLargeText
 import ru.dada.tuda.presentation.theme.BodyMediumText
 import ru.dada.tuda.presentation.theme.TitleLargeText
@@ -105,8 +106,8 @@ import ru.dada.tuda.presentation.theme.TitleMediumText
 import ru.dada.tuda.presentation.theme.colorAccent
 import ru.dada.tuda.presentation.ui.components.SwipeDirection
 import ru.dada.tuda.presentation.ui.components.SwipeableCardStack
+import ru.dada.tuda.presentation.ui.components.SwipeableCardStackController
 import ru.dada.tuda.presentation.ui.components.rememberSwipeableCardStackController
-import ru.dada.tuda.platform.openUrl
 
 @Composable
 fun EventsScreen(
@@ -142,11 +143,14 @@ fun EventsScreen(
 
             when (val resource = cardsState) {
                 is Resource.Success -> {
+                    val controller = rememberSwipeableCardStackController()
                     println("Cards loaded successfully: ${resource.data.size} items")
+                    println("Is stack finished: ${controller.isStackFinished} ${controller.currentIndex} ${controller.totalItems}")
                     val cardList = resource.data
-                    if (cardList.isNotEmpty()) {
+                    if (cardList.isNotEmpty() && !controller.isStackFinished) {
                         LazyCardStackContainer(
                             cards = cardList,
+                            controller = controller,
                             openLink = { link ->
                                 openUrl(link, platformContext)
                             },
@@ -187,6 +191,7 @@ fun EventsScreen(
 @Composable
 fun LazyCardStackContainer(
     cards: List<CardItem>,
+    controller: SwipeableCardStackController,
     openLink: (String?) -> Unit,
     onCardLike: (CardItem) -> Unit,
     onCardDislike: (CardItem) -> Unit,
@@ -199,7 +204,7 @@ fun LazyCardStackContainer(
     var openedCardIds by remember { mutableStateOf(setOf<String?>()) }
     // Локальные оверрайды starred по id
     var starredOverrides by remember { mutableStateOf(mapOf<String, Boolean>()) }
-    val controller = rememberSwipeableCardStackController()
+
 
     SwipeableCardStack(
         cards,

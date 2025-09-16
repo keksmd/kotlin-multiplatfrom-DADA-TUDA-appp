@@ -105,7 +105,7 @@ pipeline {
             }
         }
         stage('Build iOS') {
-            agent { label 'mac' }
+            agent { label 'ios' }
             options { timeout(time: 40, unit: 'MINUTES') }
             steps {
                 withCredentials(optional: true, bindings: [string(credentialsId: 'APPLE_TEAM_ID', variable: 'DEVELOPER_TEAM_ID')]) {
@@ -153,7 +153,7 @@ EOF
             }
         }
         stage('Archive iOS Artifacts') {
-            agent { label 'mac' }
+            agent { label 'ios' }
             steps {
                 archiveArtifacts artifacts: 'iosApp/build/iosApp.xcarchive/**/*', fingerprint: true, allowEmptyArchive: true
                 archiveArtifacts artifacts: 'iosApp/build/export/*.ipa', fingerprint: true, allowEmptyArchive: true
