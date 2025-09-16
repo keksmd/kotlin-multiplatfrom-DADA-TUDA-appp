@@ -187,7 +187,7 @@ EOF
                     VID=$(echo "$CREATE" | jq -r .body)
                     [ -z "$VID" -o "$VID" = null ] && VID=$(echo "$CREATE" | grep -oE 'ID = [0-9]+' | sed 's/ID = //')
                     echo "VERSION_ID=$VID"
-                    curl --silent -H "Public-Token: $TOKEN" -F "file=@$AAB" -X POST https://public-api.rustore.ru/public/v1/application/$PKG_NAME/version/$VID/aab?servicesType=Unknown\&isMainApk=true >/dev/null
+                    curl --silent -H "Public-Token: $TOKEN" -F "file=@$AAB" -X POST https://public-api.rustore.ru/public/v1/application/$PKG_NAME/version/$VID/aab?servicesType=Unknown&isMainApk=true >/dev/null
                     curl --silent -H "Public-Token: $TOKEN" -X POST https://public-api.rustore.ru/public/v1/application/$PKG_NAME/version/$VID/commit >/dev/null
                     echo 'RuStore deploy done'
                     '''
