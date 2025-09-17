@@ -119,20 +119,17 @@ fun EventsScreen(
 ) {
     val platformContext: PlatformContext = koinInject()
     val cardsState by mainViewModel.cardsLiveData.collectAsState()
-//    val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Перезагрузка при каждом возврате на экран (ON_RESUME) и один раз при первом входе
-//    DisposableEffect(lifecycleOwner) {
-//        val observer = LifecycleEventObserver { _, event ->
-//            if (event == Lifecycle.Event.ON_RESUME) {
-//                mainViewModel.reload()
-//            }
-//        }
-//        lifecycleOwner.lifecycle.addObserver(observer)
-//        // Первичная загрузка
-//        mainViewModel.reload()
-//        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-//    }
+    // Создаем контроллер на уровне экрана, чтобы он не пересоздавался
+    val controller = rememberSwipeableCardStackController()
+
+    // Создаем состояние для отслеживания завершения стопки
+    var isStackFinished by remember { mutableStateOf(false) }
+
+    // Отслеживаем изменения в контроллере и обновляем состояние
+    LaunchedEffect(controller.currentIndex, controller.totalItems) {
+        isStackFinished = controller.isStackFinished
+    }
 
     Box {
         Column(
@@ -143,11 +140,10 @@ fun EventsScreen(
 
             when (val resource = cardsState) {
                 is Resource.Success -> {
-                    val controller = rememberSwipeableCardStackController()
                     println("Cards loaded successfully: ${resource.data.size} items")
-                    println("Is stack finished: ${controller.isStackFinished} ${controller.currentIndex} ${controller.totalItems}")
+                    println("Is stack finished: $isStackFinished ${controller.currentIndex} ${controller.totalItems}")
                     val cardList = resource.data
-                    if (cardList.isNotEmpty() && !controller.isStackFinished) {
+                    if (cardList.isNotEmpty() && !isStackFinished) {
                         LazyCardStackContainer(
                             cards = cardList,
                             controller = controller,
@@ -179,10 +175,6 @@ fun EventsScreen(
                 is Resource.Loading -> {
                     LoadingCardsState()
                 }
-
-                null -> {
-                    LoadingCardsState()
-                }
             }
         }
     }
@@ -205,7 +197,6 @@ fun LazyCardStackContainer(
     // Локальные оверрайды starred по id
     var starredOverrides by remember { mutableStateOf(mapOf<String, Boolean>()) }
 
-
     SwipeableCardStack(
         cards,
         { card, direction ->
@@ -221,7 +212,8 @@ fun LazyCardStackContainer(
         },
         {},
         Modifier.fillMaxSize(),
-        controller
+        controller,
+        emptyContent = { EmptyCardsState() }
     ) {
         val isExpanded = expandedCardIds.contains(it.id)
         val isStarred = starredOverrides[it.id] ?: it.starred
@@ -879,7 +871,6 @@ fun formatNumberWithSuffix(value: Double, suffix: String): String {
     // Добавляем суффикс
     return formatted + suffix
 }
-
 
 fun getIconOnType(type: String?): ImageVector {
     return when (type?.lowercase()) {
