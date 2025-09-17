@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import ru.dada.tuda.domain.http.models.CardItem
 import ru.dada.tuda.domain.http.models.event.ApiResponseEventDTO
 import ru.dada.tuda.domain.http.models.filters.EventFilterParams
 import ru.dada.tuda.domain.models.FilterState
@@ -15,7 +16,6 @@ import ru.dada.tuda.domain.util.KmpLog
 import ru.dada.tuda.domain.util.Postman
 import ru.dada.tuda.domain.util.Resource
 import ru.dada.tuda.domain.util.UrlWorker
-import ru.dada.tuda.domain.http.models.CardItem
 
 class EventRepositoryImpl(
     private val postman: Postman,
@@ -45,7 +45,7 @@ class EventRepositoryImpl(
 
     override suspend fun initializeCardsIfEmpty() {
         val current = cardsLiveData.value
-        if (current == null || current is Resource.Empty || current is Resource.Error) {
+        if (current is Resource.Empty || current is Resource.Error) {
             loadExactNumberOfCards(MAX_CARDS)
         }
         // Если уже Loading или Success — ничего не делаем, чтобы не дублировать запрос
@@ -76,8 +76,10 @@ class EventRepositoryImpl(
                         "Authorization" to "Bearer ${urlWorker.getAuthToken()}"
                     )
                 )
-
+//                if (result.data?.isEmpty() == false)
                 _cardsLiveData.update { result }
+//                else
+//                    loadMockMoreCards()
             } catch (e: Exception) {
                 _cardsLiveData.update { Resource.Error("Ошибка при загрузке событий: ${e.message}") }
                 KmpLog.e("EventRepository", "Ошибка при загрузке событий: ${e.message}")
@@ -151,7 +153,10 @@ class EventRepositoryImpl(
                             CardItem(eventsData.data.copy(id = "${eventsData.data.id}_page${currentPage}_$index"))
                         currentCards.add(newCard)
                     }
+//                    if (currentCards.isEmpty())
                     _cardsLiveData.update { Resource.Success(currentCards) }
+//                    else
+//                        loadMockMoreCards()
                     currentPage++
 
                     // Check if we have more pages (simulate end condition)
@@ -166,12 +171,15 @@ class EventRepositoryImpl(
                         "Ошибка загрузки дополнительных событий: ${error.message}"
                     )
                     // For mock data, simulate pagination end
-                    loadMockMoreCards()
+//                    loadMockMoreCards()
                 }
             } catch (e: Exception) {
-                KmpLog.e("EventRepository", "Ошибка при загрузке дополнительных событий: ${e.message}")
+                KmpLog.e(
+                    "EventRepository",
+                    "Ошибка при загрузке дополнительных событий: ${e.message}"
+                )
                 // For mock data, simulate pagination end
-                loadMockMoreCards()
+//                loadMockMoreCards()
             } finally {
                 isLoading = false
             }
@@ -180,10 +188,10 @@ class EventRepositoryImpl(
 
     private fun loadMockMoreCards() {
         val currentCards = _cardsLiveData.value.data?.toMutableList() ?: mutableListOf()
-        if (currentCards.size >= MAX_CARDS) {
-            hasMorePages = false
-            return
-        }
+//        if (currentCards.size >= MAX_CARDS) {
+//            hasMorePages = false
+//            return
+//        }
 
         // Add a few more mock cards
         val newMockCard = CardItem(
@@ -239,7 +247,10 @@ class EventRepositoryImpl(
                 )
                 result
             } catch (e: Exception) {
-                KmpLog.e("EventRepository", "Исключение при загрузке события по ID $eventId: ${e.message}")
+                KmpLog.e(
+                    "EventRepository",
+                    "Исключение при загрузке события по ID $eventId: ${e.message}"
+                )
                 Resource.Error("Ошибка загрузки события: ${e.message}")
             }
         }
