@@ -23,10 +23,10 @@ pipeline {
                     echo "RAM total: $(awk '/MemTotal/ {printf \"%.2f GB\\n\", $2/1024/1024}' /proc/meminfo)" || true
                     echo "CPU cores: $(grep -c ^processor /proc/cpuinfo)" || true
                     echo "CPU cores: $(nproc)" || true
-                    
+
                     java -version
                     echo "JAVA_HOME: $JAVA_HOME"
-                    
+
                     '''
                   	sh '''
                     if [ ! -f /swapfile ]; then
@@ -151,32 +151,6 @@ pipeline {
                 APP_NAME="DADA-TUDA"                 # TODO: заменить на переменную из CI
                 APP_TYPE="MAIN"
   				echo "сохраненный VERSION_ID=${VERSION_ID}"
-
-                echo "==> Обновление версий в Info.plist"
-                INFO_PLIST="iosApp/iosApp/Info.plist"
-                echo "Использую APP_VERSION=${APP_VERSION} BUILD_NUMBER=${BUILD_NUMBER}"
-                if [ ! -f "$INFO_PLIST" ]; then
-                  echo "❌ Info.plist не найден по пути $INFO_PLIST"; exit 1
-                fi
-                set +e
-                /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST" >/dev/null 2>&1
-                HAS_SHORT=$?
-                /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST" >/dev/null 2>&1
-                HAS_BUILD=$?
-                set -e
-                if [ $HAS_SHORT -ne 0 ]; then
-                  /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string ${APP_VERSION}" "$INFO_PLIST"
-                else
-                  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "$INFO_PLIST"
-                fi
-                if [ $HAS_BUILD -ne 0 ]; then
-                  /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUMBER}" "$INFO_PLIST"
-                else
-                  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" "$INFO_PLIST"
-                fi
-                echo "Обновлённый Info.plist (фрагмент):"
-                /usr/libexec/PlistBuddy -c Print "$INFO_PLIST" | sed -n '1,80p'
-
                 APK_PATH=$(find . -name "*.aab" | grep release | head -n 1)
 
                 if [ -z "$APK_PATH" ]; then
