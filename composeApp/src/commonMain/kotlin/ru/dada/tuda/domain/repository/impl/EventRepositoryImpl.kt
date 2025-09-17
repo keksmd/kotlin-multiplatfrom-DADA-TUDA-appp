@@ -45,7 +45,7 @@ class EventRepositoryImpl(
 
     override suspend fun initializeCardsIfEmpty() {
         val current = cardsLiveData.value
-        if (current == null || current is Resource.Empty || current is Resource.Error) {
+        if (current is Resource.Empty || current is Resource.Error) {
             loadExactNumberOfCards(MAX_CARDS)
         }
         // Если уже Loading или Success — ничего не делаем, чтобы не дублировать запрос
@@ -76,10 +76,10 @@ class EventRepositoryImpl(
                         "Authorization" to "Bearer ${urlWorker.getAuthToken()}"
                     )
                 )
-                if (result.data?.isEmpty() == false)
-                    _cardsLiveData.update { result }
-                else
-                    loadMockMoreCards()
+//                if (result.data?.isEmpty() == false)
+                _cardsLiveData.update { result }
+//                else
+//                    loadMockMoreCards()
             } catch (e: Exception) {
                 _cardsLiveData.update { Resource.Error("Ошибка при загрузке событий: ${e.message}") }
                 KmpLog.e("EventRepository", "Ошибка при загрузке событий: ${e.message}")
@@ -153,10 +153,10 @@ class EventRepositoryImpl(
                             CardItem(eventsData.data.copy(id = "${eventsData.data.id}_page${currentPage}_$index"))
                         currentCards.add(newCard)
                     }
-                    if (currentCards.isEmpty())
-                        _cardsLiveData.update { Resource.Success(currentCards) }
-                    else
-                        loadMockMoreCards()
+//                    if (currentCards.isEmpty())
+                    _cardsLiveData.update { Resource.Success(currentCards) }
+//                    else
+//                        loadMockMoreCards()
                     currentPage++
 
                     // Check if we have more pages (simulate end condition)
@@ -171,7 +171,7 @@ class EventRepositoryImpl(
                         "Ошибка загрузки дополнительных событий: ${error.message}"
                     )
                     // For mock data, simulate pagination end
-                    loadMockMoreCards()
+//                    loadMockMoreCards()
                 }
             } catch (e: Exception) {
                 KmpLog.e(
@@ -179,7 +179,7 @@ class EventRepositoryImpl(
                     "Ошибка при загрузке дополнительных событий: ${e.message}"
                 )
                 // For mock data, simulate pagination end
-                loadMockMoreCards()
+//                loadMockMoreCards()
             } finally {
                 isLoading = false
             }
