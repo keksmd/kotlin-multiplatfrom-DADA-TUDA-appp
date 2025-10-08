@@ -11,10 +11,12 @@ import ru.dada.tuda.domain.repository.FeedbackRepository
 import ru.dada.tuda.domain.util.Postman
 import ru.dada.tuda.domain.util.Resource
 import ru.dada.tuda.domain.util.UrlWorker
+import ru.dada.tuda.domain.util.ErrorHandler
 
 class FeedbackRepositoryImpl(
     private val postman: Postman,
-    private val urlWorker: UrlWorker
+    private val urlWorker: UrlWorker,
+    private val errorHandler: ErrorHandler
 ) : FeedbackRepository {
     private val _feedbackResultLiveData = MutableStateFlow<Resource<String>>(Resource.Loading())
     override val feedbackResultLiveData: StateFlow<Resource<String>> = _feedbackResultLiveData.asStateFlow()

@@ -80,6 +80,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import dadatuda.composeapp.generated.resources.Res
 import dadatuda.composeapp.generated.resources.ic_filled_star
+import dadatuda.composeapp.generated.resources.ic_filters
 import dadatuda.composeapp.generated.resources.ic_like
 import dadatuda.composeapp.generated.resources.ic_outlined_star
 import dadatuda.composeapp.generated.resources.ic_revert_icon_thin
@@ -94,10 +95,9 @@ import ru.dada.tuda.domain.repository.PaginationState
 import ru.dada.tuda.domain.util.Resource
 import ru.dada.tuda.domain.util.toFormattedTwoLinesDateTime
 import ru.dada.tuda.presentation.compose.getShortCountLikes
-import ru.dada.tuda.presentation.theme.AutoSizeHeadlineText
 import ru.dada.tuda.presentation.theme.BodyLargeText
 import ru.dada.tuda.presentation.theme.BodyMediumText
-import ru.dada.tuda.presentation.theme.CygreFontFamily
+import ru.dada.tuda.presentation.theme.HeadlineSmallText
 import coil3.size.Size as CoilSize
 
 class SnakeCornerShape(private val radius: Dp = 20.dp) : Shape {
@@ -536,14 +536,15 @@ fun ShortlistEventCard(
                         )
 
                         Box {
-                            Image(
+                            Icon(
                                 painterResource(Res.drawable.ic_like),
                                 contentDescription = "Remove from favorites",
                                 Modifier
                                     .align(Alignment.Center)
                                     .clip(CircleShape)
                                     .clickable { showDeleteDialog = true }
-                                    .padding(8.dp)
+                                    .padding(8.dp),
+                                tint = Color.Black
                             )
                             CardLikesCounter(
                                 cardItem.likes,
@@ -825,7 +826,7 @@ private fun ShortlistHeader(
             modifier = Modifier.size(24.dp),
             tint = Color.Black
         )
-        AutoSizeHeadlineText(
+        HeadlineSmallText(
             text = "Ваши мероприятия",
             maxLines = 1,
             color = Color.Black,
@@ -860,7 +861,7 @@ private fun ShortlistHeader(
 
             // Кнопка перехода на экран фильтров
             Icon(
-                imageVector = Icons.Default.FilterList,
+                painterResource(Res.drawable.ic_filters),
                 contentDescription = "Открыть фильтры",
                 modifier = Modifier
                     .clip(CircleShape)

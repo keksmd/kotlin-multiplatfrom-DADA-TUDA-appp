@@ -6,25 +6,28 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import ru.dada.tuda.domain.http.models.CardItem
 import ru.dada.tuda.domain.http.models.filters.FeedbackFilterParams
 import ru.dada.tuda.domain.http.models.shortlist.ShortListDTO
 import ru.dada.tuda.domain.http.models.shortlist.ShortlistEventDTO
+import ru.dada.tuda.domain.models.FilterState
 import ru.dada.tuda.domain.repository.PaginationState
 import ru.dada.tuda.domain.repository.ShortlistRepository
+import ru.dada.tuda.domain.util.ErrorHandler
 import ru.dada.tuda.domain.util.KmpLog
 import ru.dada.tuda.domain.util.Postman
 import ru.dada.tuda.domain.util.Resource
 import ru.dada.tuda.domain.util.UrlWorker
-import ru.dada.tuda.domain.models.FilterState
-import ru.dada.tuda.domain.http.models.CardItem
 
 class ShortlistRepositoryImpl(
     private val postman: Postman,
-    private val urlWorker: UrlWorker
+    private val urlWorker: UrlWorker,
+    private val errorHandler: ErrorHandler
 ) : ShortlistRepository {
 
     private val _shortlistLiveData = MutableStateFlow<Resource<ShortListDTO>>(Resource.Loading())
-    override val shortlistLiveData: StateFlow<Resource<ShortListDTO>> = _shortlistLiveData.asStateFlow()
+    override val shortlistLiveData: StateFlow<Resource<ShortListDTO>> =
+        _shortlistLiveData.asStateFlow()
 
     private val _paginationState = MutableStateFlow(PaginationState())
     override val paginationState: StateFlow<PaginationState> = _paginationState.asStateFlow()
@@ -37,12 +40,15 @@ class ShortlistRepositoryImpl(
     private var allItems = mutableListOf<ShortlistEventDTO>()
     private val pageSize = 10
 
-    override suspend fun loadShortlist(feedbackFilterParams: FeedbackFilterParams, refresh: Boolean) {
+    override suspend fun loadShortlist(
+        feedbackFilterParams: FeedbackFilterParams,
+        refresh: Boolean
+    ) {
         if (refresh)
             _shortlistLiveData.value = Resource.Loading()
 
         currentFilters = feedbackFilterParams
-        
+
         withContext(Dispatchers.IO) {
             try {
                 val targetPage = if (refresh) 1 else _paginationState.value.currentPage + 1
@@ -56,7 +62,10 @@ class ShortlistRepositoryImpl(
                     error = null
                 )
 
-                KmpLog.d("ShortlistRepository", "Загружаем страницу: $targetPage, pageSize: $pageSize")
+                KmpLog.d(
+                    "ShortlistRepository",
+                    "Загружаем страницу: $targetPage, pageSize: $pageSize"
+                )
 
                 val result = postman.get<ShortListDTO>(
                     baseUrl = UrlWorker.baseUrl,
@@ -76,14 +85,20 @@ class ShortlistRepositoryImpl(
                         val totalPages = result.data.totalPages
                         val hasMore = targetPage < totalPages
 
-                        KmpLog.d("ShortlistRepository", "Получено элементов: ${newItems.size}, текущая страница: $targetPage, всего страниц: $totalPages, refresh: $refresh")
+                        KmpLog.d(
+                            "ShortlistRepository",
+                            "Получено элементов: ${newItems.size}, текущая страница: $targetPage, всего страниц: $totalPages, refresh: $refresh"
+                        )
 
                         if (refresh) {
                             allItems.clear()
                         }
                         allItems.addAll(newItems)
 
-                        KmpLog.d("ShortlistRepository", "Добавлено элементов: ${newItems.size}, всего в списке: ${allItems.size}")
+                        KmpLog.d(
+                            "ShortlistRepository",
+                            "Добавлено элементов: ${newItems.size}, всего в списке: ${allItems.size}"
+                        )
 
                         _paginationState.value = PaginationState(
                             isLoading = false,
@@ -94,10 +109,12 @@ class ShortlistRepositoryImpl(
                         )
 
                         // Создаем новый DTO с объединенными данными
-                        val combinedResult = result.copy(data = result.data.copy(content = allItems))
+                        val combinedResult =
+                            result.copy(data = result.data.copy(content = allItems))
                         println("combinedResult: $combinedResult")
                         _shortlistLiveData.value = combinedResult
                     }
+
                     is Resource.Empty -> {
                         if (refresh) {
                             allItems.clear()
@@ -110,6 +127,7 @@ class ShortlistRepositoryImpl(
                         )
                         _shortlistLiveData.value = result
                     }
+
                     is Resource.Error -> {
                         _paginationState.value = _paginationState.value.copy(
                             isLoading = false,
@@ -119,7 +137,9 @@ class ShortlistRepositoryImpl(
                         )
                         _shortlistLiveData.value = result
                     }
-                    is Resource.Loading -> { /* ignore */ }
+
+                    is Resource.Loading -> { /* ignore */
+                    }
                 }
             } catch (e: Exception) {
                 KmpLog.e("ShortlistRepository", "Ошибка при загрузке shortlist: ${e.message}")
@@ -139,7 +159,7 @@ class ShortlistRepositoryImpl(
         if (currentState.isLoading || currentState.isLoadingMore || !currentState.hasMorePages) {
             return
         }
-        
+
         currentFilters?.let { filters ->
             loadShortlist(filters, refresh = false)
         }
@@ -161,18 +181,18 @@ class ShortlistRepositoryImpl(
     override fun getCurrentFilters(): FilterState {
         return _filtersFlow.value
     }
-    
+
     // Individual item management methods
     override fun getCurrentShortlistItems(): List<CardItem> {
         return allItems.map { CardItem(it) }
     }
-    
+
     override fun updateItemFavoriteStatus(itemId: String, isFavorite: Boolean) {
         val itemIndex = allItems.indexOfFirst { it.id == itemId }
         if (itemIndex >= 0) {
             val updatedItem = allItems[itemIndex].copy(isFavorite = isFavorite)
             allItems[itemIndex] = updatedItem
-            
+
             val currentData = _shortlistLiveData.value
             if (currentData is Resource.Success) {
                 val updatedDTO = currentData.data.copy(content = allItems)
@@ -180,12 +200,12 @@ class ShortlistRepositoryImpl(
             }
         }
     }
-    
+
     override fun removeItem(itemId: String) {
         val itemIndex = allItems.indexOfFirst { it.id == itemId }
         if (itemIndex >= 0) {
             allItems.removeAt(itemIndex)
-            
+
             val currentData = _shortlistLiveData.value
             if (currentData is Resource.Success) {
                 val updatedDTO = currentData.data.copy(content = allItems)
@@ -193,7 +213,7 @@ class ShortlistRepositoryImpl(
             }
         }
     }
-    
+
     override fun findItemById(itemId: String): CardItem? {
         val item = allItems.find { it.id == itemId }
         return item?.let { CardItem(it) }

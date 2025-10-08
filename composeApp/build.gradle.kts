@@ -92,8 +92,14 @@ android {
         applicationId = "ru.dada.tuda"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        
+        // Автоматическое версионирование из Git
+        val gitCommitCount = providers.exec {
+            commandLine("git", "rev-list", "--count", "HEAD")
+        }.standardOutput.asText.get().trim().toIntOrNull() ?: 1
+        
+        versionCode = gitCommitCount
+        versionName = "1.0.$gitCommitCount"
     }
     packaging {
         resources {
@@ -102,7 +108,23 @@ android {
     }
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        
+        // Staging build type для тестирования с минификацией
+        create("staging") {
+            initWith(getByName("debug"))
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            matchingFallbacks.add("debug")
         }
     }
     compileOptions {

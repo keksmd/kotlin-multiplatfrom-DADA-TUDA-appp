@@ -41,6 +41,23 @@ data class CardItem(
     val startSecond: Int = 0,
     val endSecond: Int = 0
 ) {
+    companion object {
+        private fun sanitizeList(list: MutableList<String?>?): MutableList<String?>? {
+            return list?.map { item ->
+                if (item != null && containsLettersAndDigits(item)) {
+                    "Другое"
+                } else {
+                    item
+                }
+            }?.toMutableList()
+        }
+
+        private fun containsLettersAndDigits(str: String): Boolean {
+            val hasLetter = str.any { it.isLetter() }
+            val hasDigit = str.any { it.isDigit() }
+            return hasLetter && hasDigit
+        }
+    }
     constructor(dto: ApiResponseEventDTO) : this(
         id = dto.id,
         imageURL = dto.imageURL.orEmpty().filterNotNull(),
@@ -49,8 +66,8 @@ data class CardItem(
         city = dto.city,
         address = dto.address,
         locationName = dto.locationName,
-        tags = dto.tags,
-        categories = dto.categories,
+        tags = sanitizeList(dto.tags),
+        categories = sanitizeList(dto.categories),
         shortDescription = dto.shortDescription,
         price = dto.price,
         priceType = dto.priceType,
@@ -73,8 +90,8 @@ data class CardItem(
         city = dto.city,
         address = dto.address,
         locationName = dto.locationName,
-        tags = dto.tags,
-        categories = dto.categories,
+        tags = sanitizeList(dto.tags),
+        categories = sanitizeList(dto.categories),
         shortDescription = dto.shortDescription,
         price = dto.price,
         priceType = dto.priceType,

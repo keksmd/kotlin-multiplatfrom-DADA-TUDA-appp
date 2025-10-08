@@ -30,13 +30,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MovieFilter
@@ -48,8 +45,6 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.SportsFootball
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -58,7 +53,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,20 +68,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dadatuda.composeapp.generated.resources.Res
+import dadatuda.composeapp.generated.resources.ic_arrow_back_long
+import dadatuda.composeapp.generated.resources.ic_close
+import dadatuda.composeapp.generated.resources.ic_filled_star
 import dadatuda.composeapp.generated.resources.ic_filters
+import dadatuda.composeapp.generated.resources.ic_like
+import dadatuda.composeapp.generated.resources.ic_outlined_star
 import dadatuda.composeapp.generated.resources.revert_icon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -99,6 +101,8 @@ import ru.dada.tuda.domain.http.models.feedback.FeedbackViewModel
 import ru.dada.tuda.domain.util.PlatformContext
 import ru.dada.tuda.domain.util.Resource
 import ru.dada.tuda.platform.openUrl
+import ru.dada.tuda.presentation.components.ErrorView
+import ru.dada.tuda.presentation.components.LoadingIndicator
 import ru.dada.tuda.presentation.theme.BodyLargeText
 import ru.dada.tuda.presentation.theme.BodyMediumText
 import ru.dada.tuda.presentation.theme.TitleLargeText
@@ -169,11 +173,14 @@ fun EventsScreen(
                 }
 
                 is Resource.Error -> {
-                    ErrorCardsState(resource.message)
+                    ErrorView(
+                        message = resource.message ?: "Произошла ошибка при загрузке событий",
+                        onRetry = { mainViewModel.loadExactNumberOfCards(3) }
+                    )
                 }
 
                 is Resource.Loading -> {
-                    LoadingCardsState()
+                    LoadingIndicator(message = "Загружаем события...")
                 }
             }
         }
@@ -406,6 +413,9 @@ fun CardContent(
     val pagerState = rememberPagerState(pageCount = { card.imageURL.size })
     var timerProgress by remember(pagerState.currentPage) { mutableFloatStateOf(0f) }
 
+    // Состояние для отслеживания, находится ли LazyColumn в начале (верхней позиции)
+    var isAtTop by remember { mutableStateOf(true) }
+
     Box(Modifier.fillMaxSize()) {
         CardBackground(
             imageUrl = card.imageURL,
@@ -425,7 +435,9 @@ fun CardContent(
 
             AnimatedVisibility(!isExpanded, Modifier.align(Alignment.End)) {
                 Icon(
-                    painterResource(Res.drawable.ic_filters), null, tint = Color.White,
+                    painterResource(Res.drawable.ic_filters),
+                    null,
+                    tint = Color.White,
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable(onClick = navigateToFilters)
@@ -437,6 +449,9 @@ fun CardContent(
                 card = card,
                 isExpanded = isExpanded,
                 openLink = openLink,
+                onScrollStateChange = { atTop -> isAtTop = atTop },
+                onSwipeToClose = onMoreInfoToggle,
+                onSwipeToOpen = onMoreInfoToggle,
                 modifier = Modifier.weight(1f)
             )
 
@@ -463,13 +478,8 @@ fun CardBackground(
     if (imageUrl.isEmpty()) return
 
     Box(
-        Modifier
-            .fillMaxSize()
-            .pointerInput(Unit) {
-                detectVerticalDragGestures { change: PointerInputChange, dragAmount: Float ->
-                    println("change: $change, dragAmount: $dragAmount")
-                }
-            }) {
+        Modifier.fillMaxSize()
+    ) {
         val coroutineScope = rememberCoroutineScope()
         var autoScrollKey by remember { mutableIntStateOf(0) }
 
@@ -489,9 +499,12 @@ fun CardBackground(
                     delay(updateInterval)
                 }
 
-                // Переходим к следующей странице
-                val nextPage = (pagerState.currentPage + 1)
-                if (nextPage >= imageUrl.lastIndex) return@LaunchedEffect
+                // Переходим к следующей странице или возвращаемся к первой
+                val nextPage = if (pagerState.currentPage >= imageUrl.lastIndex) {
+                    0 // Возвращаемся к первому изображению
+                } else {
+                    pagerState.currentPage + 1
+                }
 
                 pagerState.animateScrollToPage(nextPage)
                 autoScrollKey++ // Перезапускаем таймер
@@ -633,17 +646,20 @@ fun CardProgressIndicator(pagerState: PagerState, timerProgress: Float) {
                 else -> 0f
             }
 
-            LinearProgressIndicator(
-                progress = { progress },
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(1f)
+                    .height(4.dp)
                     .clip(RoundedCornerShape(50))
-                    .weight(1f),
-                color = Color.White,
-                strokeCap = StrokeCap.Round,
-                trackColor = Color.White.copy(.5f),
-                gapSize = 0.dp,
-            )
+                    .background(Color.White.copy(.5f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(progress)
+                        .background(Color.White)
+                )
+            }
         }
     }
 }
@@ -653,101 +669,238 @@ fun CardMainContent(
     card: CardItem,
     isExpanded: Boolean,
     openLink: (String?) -> Unit,
+    onScrollStateChange: (Boolean) -> Unit = {},
+    onSwipeToClose: () -> Unit = {},
+    onSwipeToOpen: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    Column(
+    var totalDragAmount by remember { mutableFloatStateOf(0f) }
+    val swipeUpThreshold = -150f
+    val swipeDownThreshold = 150f
+
+    AnimatedContent(
+        targetState = isExpanded,
         modifier = modifier,
-        verticalArrangement = Arrangement.Bottom
-    ) {
-        Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(16.dp)) {
-            Icon(
-                painterResource(Res.drawable.revert_icon),
-                null,
-                Modifier.size(24.dp),
-                colorAccent
-            )
-            TitleLargeText(
-                card.title ?: "Нет названия",
-                color = Color.White
-            )
-        }
+        label = "CardContentAnimation"
+    ) { expanded ->
+        if (expanded) {
+            // В развернутом режиме - весь контент в LazyColumn
+            val lazyListState = androidx.compose.foundation.lazy.rememberLazyListState()
 
-        Spacer(Modifier.height(16.dp))
-
-        Card(colors = CardDefaults.cardColors(Color.White.copy(.23f))) {
-            Row(Modifier.padding(6.dp), Arrangement.spacedBy(6.dp)) {
-                Icon(getIconOnType(card.type), null, tint = Color.White)
-                Text(card.categories?.firstOrNull() ?: "Нет категории", color = Color.White)
+            // Отслеживаем позицию скролла
+            LaunchedEffect(
+                lazyListState.firstVisibleItemIndex,
+                lazyListState.firstVisibleItemScrollOffset
+            ) {
+                val isAtTop = lazyListState.firstVisibleItemIndex == 0 &&
+                        lazyListState.firstVisibleItemScrollOffset == 0
+                onScrollStateChange(isAtTop)
             }
-        }
 
-        Spacer(Modifier.height(20.dp))
+            // Создаем NestedScrollConnection для координации жестов
+            val nestedScrollConnection = remember {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(
+                        available: Offset,
+                        source: NestedScrollSource
+                    ): Offset {
+                        val isAtTop = lazyListState.firstVisibleItemIndex == 0 &&
+                                lazyListState.firstVisibleItemScrollOffset == 0
+                        val delta = available.y
 
-        TitleMediumText(
-            card.address ?: "Нет адресса",
-            color = Color.White
-        )
+                        // Если свайпаем вниз (delta > 0) когда наверху
+                        if (delta > 0 && isAtTop) {
+                            totalDragAmount += delta
+                            // Проверяем порог
+                            if (totalDragAmount > swipeDownThreshold) {
+                                onSwipeToClose()
+                                totalDragAmount = 0f
+                            }
+                            // Потребляем событие, чтобы LazyColumn не скроллился
+                            return available
+                        }
 
-        Spacer(Modifier.height(12.dp))
+                        // Сбрасываем счетчик если скроллим вверх
+                        if (delta < 0) {
+                            totalDragAmount = 0f
+                        }
 
-        BodyMediumText(
-            card.getMainScreenDate(),
-            color = Color.White
-        )
-
-        Spacer(Modifier.height(4.dp))
-
-        BodyMediumText(
-            card.price?.let { "От $it₽" } ?: "Нет цены",
-            color = colorAccent
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        AnimatedContent(
-            isExpanded,
-            label = "CardContentAnimation"
-        ) {
-            if (it) {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    item {
-                        BodyLargeText(
-                            card.description ?: "Нет описания",
-                            color = Color.White,
-                        )
+                        return Offset.Zero
                     }
 
-                    item {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            Arrangement.spacedBy(16.dp),
-                            Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                painterResource(Res.drawable.revert_icon),
-                                null,
-                                Modifier.size(24.dp),
-                                colorAccent
+                    override suspend fun onPreFling(available: Velocity): Velocity {
+                        totalDragAmount = 0f
+                        return Velocity.Zero
+                    }
+                }
+            }
+
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(nestedScrollConnection),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(16.dp)) {
+                        Icon(
+                            painterResource(Res.drawable.revert_icon),
+                            null,
+                            Modifier.size(24.dp),
+                            colorAccent
+                        )
+                        TitleLargeText(
+                            card.title ?: "Нет названия",
+                            color = Color.White
+                        )
+                    }
+                }
+
+                item {
+                    Card(colors = CardDefaults.cardColors(Color.White.copy(.23f))) {
+                        Row(Modifier.padding(6.dp), Arrangement.spacedBy(6.dp)) {
+                            Icon(getIconOnType(card.type), null, tint = Color.White)
+                            Text(
+                                card.categories?.firstOrNull() ?: "Нет категории",
+                                color = Color.White
                             )
-                            Button(
-                                { openLink(card.referralLink) },
-                                colors = ButtonDefaults.buttonColors(colorAccent)
-                            ) {
-                                TitleMediumText(
-                                    "Перейти на сайт мероприятия",
-                                    color = Color.Black
-                                )
-                            }
                         }
                     }
                 }
-            } else
+
+                item {
+                    TitleMediumText(
+                        card.address ?: "Нет адресса",
+                        color = Color.White
+                    )
+                }
+
+                item {
+                    BodyMediumText(
+                        card.getMainScreenDate(),
+                        color = Color.White
+                    )
+                }
+
+                item {
+                    BodyMediumText(
+                        card.price?.let { "От $it₽" } ?: "Нет цены",
+                        color = colorAccent
+                    )
+                }
+
+                item {
+                    BodyLargeText(
+                        card.description ?: "Нет описания",
+                        color = Color.White,
+                    )
+                }
+
+                item {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        Arrangement.spacedBy(16.dp),
+                        Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painterResource(Res.drawable.revert_icon),
+                            null,
+                            Modifier.size(24.dp),
+                            colorAccent
+                        )
+                        Button(
+                            { openLink(card.referralLink) },
+                            colors = ButtonDefaults.buttonColors(colorAccent)
+                        ) {
+                            TitleMediumText(
+                                "Перейти на сайт мероприятия",
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Когда карточка закрыта, всегда сообщаем что мы "наверху"
+            LaunchedEffect(Unit) {
+                onScrollStateChange(true)
+            }
+
+            // В свернутом режиме - статичный контент внизу
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragStart = { totalDragAmount = 0f },
+                            onDragEnd = {
+                                if (totalDragAmount < swipeUpThreshold) {
+                                    onSwipeToOpen()
+                                }
+                                totalDragAmount = 0f
+                            },
+                            onDragCancel = { totalDragAmount = 0f },
+                            onVerticalDrag = { change, dragAmount ->
+                                totalDragAmount += dragAmount
+                                change.consume()
+                            }
+                        )
+                    },
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(16.dp)) {
+                    Icon(
+                        painterResource(Res.drawable.revert_icon),
+                        null,
+                        Modifier.size(24.dp),
+                        colorAccent
+                    )
+                    TitleLargeText(
+                        card.title ?: "Нет названия",
+                        color = Color.White
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Card(colors = CardDefaults.cardColors(Color.White.copy(.23f))) {
+                    Row(Modifier.padding(6.dp), Arrangement.spacedBy(6.dp)) {
+                        Icon(getIconOnType(card.type), null, tint = Color.White)
+                        Text(card.categories?.firstOrNull() ?: "Нет категории", color = Color.White)
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                TitleMediumText(
+                    card.address ?: "Нет адресса",
+                    color = Color.White
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                BodyMediumText(
+                    card.getMainScreenDate(),
+                    color = Color.White
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                BodyMediumText(
+                    card.price?.let { "От $it₽" } ?: "Нет цены",
+                    color = colorAccent
+                )
+
+                Spacer(Modifier.height(16.dp))
+
                 BodyLargeText(
                     card.shortDescription ?: "Нет краткого описания",
                     color = Color.White,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
         }
     }
 }
@@ -767,11 +920,8 @@ fun CardActionButtons(
             colors = IconButtonDefaults.iconButtonColors(contentColor = colorAccent)
         ) {
             Icon(
-                Icons.Default.Close,
-                null,
-                Modifier
-                    .wrapContentHeight()
-                    .aspectRatio(1f)
+                painterResource(Res.drawable.ic_close),
+                null
             )
         }
 
@@ -780,10 +930,9 @@ fun CardActionButtons(
             colors = IconButtonDefaults.iconButtonColors(contentColor = colorAccent)
         ) {
             Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
+                painterResource(Res.drawable.ic_arrow_back_long),
                 null,
-                Modifier
-                    .padding(4.dp)
+                Modifier.padding(4.dp)
                     .wrapContentHeight()
                     .aspectRatio(1f)
             )
@@ -807,12 +956,13 @@ fun CardActionButtons(
         ) {
             Crossfade(isStarred) {
                 Icon(
-                    if (it) Icons.Default.Star else Icons.Default.StarOutline,
+                    painterResource(if (it) Res.drawable.ic_filled_star else Res.drawable.ic_outlined_star),
                     null,
                     Modifier
                         .padding(4.dp)
                         .wrapContentHeight()
-                        .aspectRatio(1f)
+                        .aspectRatio(1f),
+                    tint = colorAccent
                 )
             }
         }
@@ -822,11 +972,8 @@ fun CardActionButtons(
             colors = IconButtonDefaults.iconButtonColors(contentColor = colorAccent),
         ) {
             Icon(
-                Icons.Default.Favorite,
+                painterResource(Res.drawable.ic_like),
                 null,
-                Modifier
-                    .wrapContentHeight()
-                    .aspectRatio(1f),
             )
         }
     }

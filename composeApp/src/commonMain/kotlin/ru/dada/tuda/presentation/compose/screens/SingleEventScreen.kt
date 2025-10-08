@@ -28,9 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,7 +64,10 @@ import coil3.compose.AsyncImage
 import dadatuda.composeapp.generated.resources.Res
 import dadatuda.composeapp.generated.resources.ic_arrow_back_long
 import dadatuda.composeapp.generated.resources.ic_arrow_next_long
+import dadatuda.composeapp.generated.resources.ic_close
+import dadatuda.composeapp.generated.resources.ic_filled_star
 import dadatuda.composeapp.generated.resources.ic_like
+import dadatuda.composeapp.generated.resources.ic_outlined_star
 import dadatuda.composeapp.generated.resources.revert_icon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,6 +77,8 @@ import ru.dada.tuda.domain.http.models.CardItem
 import ru.dada.tuda.domain.http.models.singleevent.SingleEventViewModel
 import ru.dada.tuda.domain.util.PlatformContext
 import ru.dada.tuda.domain.util.Resource
+import ru.dada.tuda.platform.openUrl
+import ru.dada.tuda.platform.shareText
 import ru.dada.tuda.presentation.compose.getIconOnType
 import ru.dada.tuda.presentation.compose.screens.shortlist.CardLikesCounter
 import ru.dada.tuda.presentation.compose.screens.shortlist.ShortlistDeleteDialog
@@ -85,8 +87,6 @@ import ru.dada.tuda.presentation.theme.BodyMediumText
 import ru.dada.tuda.presentation.theme.TitleLargeText
 import ru.dada.tuda.presentation.theme.TitleMediumText
 import ru.dada.tuda.presentation.theme.colorAccent
-import ru.dada.tuda.platform.openUrl
-import ru.dada.tuda.platform.shareText
 
 @Composable
 fun SingleEventScreen(
@@ -122,7 +122,8 @@ fun SingleEventScreen(
                         openUrl(link, platformContext)
                     },
                     onShare = {
-                        val shareTextValue = "${cardItem.title}\n${cardItem.shortDescription}\n${cardItem.referralLink}"
+                        val shareTextValue =
+                            "${cardItem.title}\n${cardItem.shortDescription}\n${cardItem.referralLink}"
                         shareText(shareTextValue, platformContext)
                     },
                     bottomOverlapPadding = bottomContentPadding
@@ -518,9 +519,11 @@ fun SingleEventBackground(
                         }
                 )
 
-                Spacer(modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f))
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                )
 
                 // Правая треть экрана - следующая картинка
                 Box(
@@ -568,9 +571,11 @@ fun SingleEventBackground(
         }
     }
 
-    Box(Modifier
-        .fillMaxSize()
-        .background(Color.Black.copy(0.75f)))
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(0.75f))
+    )
 }
 
 @Composable
@@ -613,18 +618,16 @@ fun SingleEventTopBar(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        IconButton(
-            onClick = onBackClick,
-            colors = IconButtonDefaults.iconButtonColors(
-                containerColor = Color.Black.copy(alpha = 0.3f),
-                contentColor = Color.White
-            )
-        ) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Назад"
-            )
-        }
+        Icon(
+            painterResource(Res.drawable.ic_close),
+            contentDescription = "Назад",
+            Modifier
+                .padding(4.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onBackClick)
+                .padding(4.dp),
+            tint = Color.White
+        )
     }
 }
 
@@ -748,7 +751,7 @@ fun SingleEventActionButtons(
         ) {
             Crossfade(isStarred) {
                 Icon(
-                    if (it) Icons.Default.Star else Icons.Default.StarOutline,
+                    painterResource(if (it) Res.drawable.ic_filled_star else Res.drawable.ic_outlined_star),
                     null,
                     Modifier
                         .padding(4.dp)

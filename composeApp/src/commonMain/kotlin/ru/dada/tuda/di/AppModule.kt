@@ -1,6 +1,5 @@
 package ru.dada.tuda.di
 
-import androidx.lifecycle.viewmodel.compose.viewModel
 import org.koin.dsl.module
 import ru.dada.tuda.Greeting
 import ru.dada.tuda.domain.http.models.auth.AuthViewModel
@@ -19,18 +18,23 @@ import ru.dada.tuda.domain.repository.impl.ShortlistRepositoryImpl
 import ru.dada.tuda.domain.usecase.SubmitFeedbackUseCase
 import ru.dada.tuda.domain.util.Postman
 import ru.dada.tuda.domain.util.UrlWorker
+import ru.dada.tuda.domain.util.ErrorHandler
+import ru.dada.tuda.domain.util.ErrorHandlerImpl
 
 val appModule = module {
     // Basic services
     single { Greeting() }
     single { Postman() }
     single { UrlWorker(get()) }
+    
+    // Error handling
+    single<ErrorHandler> { ErrorHandlerImpl() }
 
     // Repositories
-    single<AuthRepository> { AuthRepositoryImpl(get(), get()) }
-    single<EventRepository> { EventRepositoryImpl(get(), get()) }
-    single<FeedbackRepository> { FeedbackRepositoryImpl(get(), get()) }
-    single<ShortlistRepository> { ShortlistRepositoryImpl(get(), get()) }
+    single<AuthRepository> { AuthRepositoryImpl(get(), get(), get()) }
+    single<EventRepository> { EventRepositoryImpl(get(), get(), get()) }
+    single<FeedbackRepository> { FeedbackRepositoryImpl(get(), get(), get()) }
+    single<ShortlistRepository> { ShortlistRepositoryImpl(get(), get(), get()) }
 
     single { SubmitFeedbackUseCase(get(), get()) }
 

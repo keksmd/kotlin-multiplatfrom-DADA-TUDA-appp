@@ -1,6 +1,7 @@
 package ru.dada.tuda.domain.repository.impl
 
-import io.ktor.http.*
+import io.ktor.http.ContentType
+import io.ktor.http.parameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,6 +11,8 @@ import kotlinx.coroutines.withContext
 import ru.dada.tuda.domain.http.models.auth.TokenDataDTO
 import ru.dada.tuda.domain.http.models.auth.UserAuthDTO
 import ru.dada.tuda.domain.repository.AuthRepository
+import ru.dada.tuda.domain.util.AppError
+import ru.dada.tuda.domain.util.ErrorHandler
 import ru.dada.tuda.domain.util.KmpLog
 import ru.dada.tuda.domain.util.Postman
 import ru.dada.tuda.domain.util.Resource
@@ -17,7 +20,8 @@ import ru.dada.tuda.domain.util.UrlWorker
 
 class AuthRepositoryImpl(
     private val postman: Postman,
-    private val urlWorker: UrlWorker
+    private val urlWorker: UrlWorker,
+    private val errorHandler: ErrorHandler
 ) : AuthRepository {
     private val _userLiveData = MutableStateFlow<Resource<UserAuthDTO>?>(null)
     override val userLiveData: StateFlow<Resource<UserAuthDTO>?> = _userLiveData.asStateFlow()
@@ -46,10 +50,15 @@ class AuthRepositoryImpl(
                 result.onSuccess {
                     _userLiveData.value = Resource.Success(UserAuthDTO(login, password))
                 }.onError { error ->
-                    _userLiveData.value = Resource.Error(error.message)
+                    val appError =
+                        AppError.ServerError(error.status, error.message)
+                    errorHandler.logError(appError)
+                    _userLiveData.value = Resource.Error(errorHandler.handleError(appError))
                 }
             } catch (e: Exception) {
-                _userLiveData.value = Resource.Error("Authentication error: ${e.message}")
+                val appError = AppError.UnknownError(e)
+                errorHandler.logError(appError)
+                _userLiveData.value = Resource.Error(errorHandler.handleError(appError))
             }
         }
     }

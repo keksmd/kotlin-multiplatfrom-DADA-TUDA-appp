@@ -16,10 +16,14 @@ import ru.dada.tuda.domain.util.KmpLog
 import ru.dada.tuda.domain.util.Postman
 import ru.dada.tuda.domain.util.Resource
 import ru.dada.tuda.domain.util.UrlWorker
+import ru.dada.tuda.domain.util.ErrorHandler
+import ru.dada.tuda.domain.util.AppError
+import ru.dada.tuda.domain.util.mapError
 
 class EventRepositoryImpl(
     private val postman: Postman,
-    private val urlWorker: UrlWorker
+    private val urlWorker: UrlWorker,
+    private val errorHandler: ErrorHandler
 ) : EventRepository {
     private val _cardsLiveData =
         MutableStateFlow<Resource<MutableList<CardItem>>>(Resource.Loading())
@@ -76,13 +80,11 @@ class EventRepositoryImpl(
                         "Authorization" to "Bearer ${urlWorker.getAuthToken()}"
                     )
                 )
-//                if (result.data?.isEmpty() == false)
-                _cardsLiveData.update { result }
-//                else
-//                    loadMockMoreCards()
+                _cardsLiveData.update { result.mapError(errorHandler) }
             } catch (e: Exception) {
-                _cardsLiveData.update { Resource.Error("Ошибка при загрузке событий: ${e.message}") }
-                KmpLog.e("EventRepository", "Ошибка при загрузке событий: ${e.message}")
+                val error = AppError.UnknownError(e)
+                errorHandler.logError(error)
+                _cardsLiveData.update { Resource.Error(errorHandler.handleError(error)) }
             } finally {
                 isLoading = false
             }
@@ -153,10 +155,7 @@ class EventRepositoryImpl(
                             CardItem(eventsData.data.copy(id = "${eventsData.data.id}_page${currentPage}_$index"))
                         currentCards.add(newCard)
                     }
-//                    if (currentCards.isEmpty())
                     _cardsLiveData.update { Resource.Success(currentCards) }
-//                    else
-//                        loadMockMoreCards()
                     currentPage++
 
                     // Check if we have more pages (simulate end condition)
@@ -170,62 +169,16 @@ class EventRepositoryImpl(
                         "EventRepository",
                         "Ошибка загрузки дополнительных событий: ${error.message}"
                     )
-                    // For mock data, simulate pagination end
-//                    loadMockMoreCards()
                 }
             } catch (e: Exception) {
                 KmpLog.e(
                     "EventRepository",
                     "Ошибка при загрузке дополнительных событий: ${e.message}"
                 )
-                // For mock data, simulate pagination end
-//                loadMockMoreCards()
             } finally {
                 isLoading = false
             }
         }
-    }
-
-    private fun loadMockMoreCards() {
-        val currentCards = _cardsLiveData.value.data?.toMutableList() ?: mutableListOf()
-//        if (currentCards.size >= MAX_CARDS) {
-//            hasMorePages = false
-//            return
-//        }
-
-        // Add a few more mock cards
-        val newMockCard = CardItem(
-            id = "mock_${currentCards.size + 1}",
-            imageURL = listOf("https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=400&h=600&fit=crop&crop=center"),
-            title = "Новое событие ${currentCards.size + 1}",
-            description = "Описание дополнительного события для тестирования пагинации.",
-            city = "Москва",
-            address = "ул. Тестовая, ${currentCards.size + 1}",
-            locationName = "Тестовая площадка",
-            price = "${(currentCards.size + 1) * 100}",
-            priceType = "руб",
-            type = "test",
-            tags = mutableListOf("тест", "пагинация"),
-            categories = mutableListOf("Тестирование"),
-            date = "2024-03-01T${10 + currentCards.size}:00:00",
-            dateEnd = "2024-03-01T${12 + currentCards.size}:00:00",
-            referralLink = "https://example.com/tickets/mock_${currentCards.size + 1}",
-            source = "Mock",
-            creatorId = "mock_creator",
-            views = currentCards.size * 10,
-            likes = currentCards.size,
-            isFavorite = false
-        )
-
-        currentCards.add(newMockCard)
-        _cardsLiveData.update { Resource.Success(currentCards) }
-        currentPage++
-        hasMorePages = currentCards.size < MAX_CARDS
-
-        KmpLog.d(
-            "EventRepository",
-            "Добавлена моковая карточка. Всего: ${currentCards.size}, hasMore: $hasMorePages"
-        )
     }
 
     // Filter state management methods - in-memory only

@@ -15,13 +15,13 @@ class AuthViewModel(
     val userLiveData = authRepository.userLiveData
     val tokenLiveData = authRepository.tokenLiveData
 
-    private val _nickname = mutableStateOf("") //string12345
+    private val _nickname = mutableStateOf("string12345") //string12345
     val nickname: State<String> = _nickname
 
     private val _email = mutableStateOf("")
     val email: State<String> = _email
 
-    private val _password = mutableStateOf("") //string123
+    private val _password = mutableStateOf("string123") //string123
     val password: State<String> = _password
 
     private val _confirmPassword = mutableStateOf("")
