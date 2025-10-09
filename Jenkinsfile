@@ -68,8 +68,6 @@ pipeline {
                     sh '''
                     ./gradlew --stop || true
                     ./gradlew clean || true
-                    rm -rf ~/.gradle/caches
-                    rm -rf ~/.gradle/daemon
                     '''
                 }
             }
