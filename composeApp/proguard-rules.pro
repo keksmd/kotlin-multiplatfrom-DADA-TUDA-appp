@@ -100,6 +100,15 @@
 -keep class ru.dada.tuda.domain.http.models.** { *; }
 -keep class ru.dada.tuda.data.dto.** { *; }
 
+# Google ErrorProne и JSR-305 аннотации (используются только для статического анализа)
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn javax.annotation.concurrent.**
+
+# Google Crypto Tink (если используется)
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
+
 # Keep ViewModels
 -keep class * extends androidx.lifecycle.ViewModel {
     <init>(...);

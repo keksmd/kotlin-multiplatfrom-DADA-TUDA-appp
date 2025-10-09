@@ -42,6 +42,10 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.cio)
             implementation(libs.androidx.security.crypto)
+
+            // Аннотации для R8/ProGuard (только для компиляции)
+            compileOnly("com.google.errorprone:error_prone_annotations:2.21.1")
+            compileOnly("javax.annotation:javax.annotation-api:1.3.2")
         }
         commonMain.dependencies {
             implementation(compose.runtime)
