@@ -79,11 +79,11 @@ pipeline {
                 script {
                     sh '''
                     ./gradlew clean assembleRelease \
-                        --no-daemon \
                         --build-cache \
                         --stacktrace \
                         --info \
                         --max-workers=2 \
+                        --no-daemon \
                         -Dkotlin.compiler.execution.strategy=in-process \
                         -Dorg.gradle.testing.maxParallelForks=1 \
                         -Pandroid.testOptions.unitTests.all.maxParallelForks=1\
