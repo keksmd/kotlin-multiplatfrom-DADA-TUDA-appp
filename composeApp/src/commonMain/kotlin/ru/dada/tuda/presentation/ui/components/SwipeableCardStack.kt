@@ -15,11 +15,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,7 +37,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import dadatuda.composeapp.generated.resources.Res
 import dadatuda.composeapp.generated.resources.dada_like_swipe
@@ -49,6 +45,13 @@ import org.jetbrains.compose.resources.painterResource
 import ru.dada.tuda.presentation.theme.colorAccent
 import kotlin.math.abs
 import kotlin.math.min
+
+/**
+ * Enum для направления свайпа
+ */
+enum class SwipeDirection {
+    LEFT, RIGHT, NONE
+}
 
 // Оптимизированные константы для анимации
 private val OPTIMIZED_SPRING_SMOOTH: AnimationSpec<Float> = spring(
@@ -67,6 +70,23 @@ private val TripleConverter = TwoWayConverter<Triple<Float, Float, Float>, Anima
 class SwipeableCardStackController {
     private var _swipeAction: ((SwipeDirection) -> Unit)? = null
     private var _undoAction: (() -> Unit)? = null
+    private var _currentIndex: Int = 0
+    private var _totalItems: Int = 0
+
+    /**
+     * Текущий индекс карточки в стопке
+     */
+    val currentIndex: Int get() = _currentIndex
+
+    /**
+     * Общее количество элементов в стопке
+     */
+    val totalItems: Int get() = _totalItems
+
+    /**
+     * Закончились ли карточки в стопке
+     */
+    val isStackFinished: Boolean get() = _totalItems > 0 && _currentIndex >= _totalItems
 
     internal fun setSwipeAction(action: (SwipeDirection) -> Unit) {
         _swipeAction = action
@@ -74,6 +94,11 @@ class SwipeableCardStackController {
 
     internal fun setUndoAction(action: () -> Unit) {
         _undoAction = action
+    }
+
+    internal fun updateIndex(newIndex: Int, totalItems: Int) {
+        _currentIndex = newIndex
+        _totalItems = totalItems
     }
 
     /**
@@ -118,7 +143,7 @@ fun rememberSwipeableCardStackController(): SwipeableCardStackController {
  * @param controller контроллер для программного управления свайпами
  * @param maxVisibleCards максимальное количество видимых карточек в стопке
  * @param swipeThreshold порог для срабатывания свайпа (в пикселях)
- * @param emptyMessage сообщение при пустой стопке
+ * @param emptyContent контент при пустой стопке
  */
 @Composable
 fun <T> SwipeableCardStack(
@@ -128,8 +153,8 @@ fun <T> SwipeableCardStack(
     modifier: Modifier = Modifier,
     controller: SwipeableCardStackController? = null,
     maxVisibleCards: Int = 3,
-    swipeThreshold: Float = 300f,
-    emptyMessage: String = "Нет больше карточек",
+    swipeThreshold: Float = 150f,
+    emptyContent: @Composable () -> Unit,
     cardContent: @Composable (T) -> Unit,
 ) {
     var currentIndex by remember { mutableIntStateOf(0) }
@@ -139,6 +164,7 @@ fun <T> SwipeableCardStack(
 
     // Настройка контроллера для программного свайпа и возврата
     LaunchedEffect(controller, items) {
+        controller?.updateIndex(currentIndex, items.size)
         controller?.setSwipeAction { direction ->
             if (currentIndex < items.size) {
                 programmaticSwipeDirection = direction
@@ -210,29 +236,13 @@ fun <T> SwipeableCardStack(
 
         // Показать сообщение если карточки закончились
         if (currentIndex >= items.size) {
-            Card(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                shape = RectangleShape
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = emptyMessage,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            emptyContent()
         }
     }
 }
 
 /**
- * Отдельная карточка в стопке с поддержкой свайпа
+ * Отдельная карточка в стопке с поддержкой двухэтапного свайпа
  */
 @Composable
 private fun SwipeableCard(
@@ -248,6 +258,7 @@ private fun SwipeableCard(
     var isDragging by remember { mutableStateOf(false) }
     var isRemoving by remember { mutableStateOf(false) }
     var programmaticTarget by remember { mutableStateOf<Offset?>(null) }
+
 
     // Обработка программного свайпа - устанавливаем целевую позицию для анимации
     LaunchedEffect(programmaticSwipeDirection) {
@@ -268,7 +279,7 @@ private fun SwipeableCard(
         targetValue = when {
             isDragging -> offset
             isRemoving && programmaticTarget != null -> programmaticTarget!!
-            isRemoving -> offset.copy(x = if (offset.x > 0) 1200f else -1200f, y = offset.y * 0.5f)
+            isRemoving -> offset.copy(x = if (offset.x > 0) 1200f else -1200f, y = 0f)
             else -> Offset.Zero
         },
         animationSpec = if (isRemoving) {
@@ -299,7 +310,7 @@ private fun SwipeableCard(
     val animatedStackProperties by animateValueAsState(
         targetValue = with(density) {
             Triple(
-                1f - (animatedCardIndex * 0.04f) + if (cardIndex == 0 && isDragging) -0.05f else 0f,
+                1f - (animatedCardIndex * 0.04f),
                 animatedCardIndex * 6f,
                 if (isDragging && cardIndex == 0) 12.dp.toPx() else 6.dp.toPx()
             )
@@ -330,11 +341,8 @@ private fun SwipeableCard(
             .zIndex((maxVisibleCards - cardIndex).toFloat())
             .graphicsLayer {
                 translationX = animatedOffset.x
-                translationY =
-                    animatedOffset.y + with(density) { animatedStackProperties.second.dp.toPx() }
-                rotationZ = animatedOffset.x * 0.08f
-                scaleX = animatedStackProperties.first
-                scaleY = animatedStackProperties.first
+                translationY = animatedOffset.y
+                rotationZ = animatedOffset.x * 0.03f
                 shadowElevation = animatedStackProperties.third
                 this.alpha = alpha
             }
@@ -351,7 +359,10 @@ private fun SwipeableCard(
                                     offset = Offset.Zero
                                 }
                             },
-                            onDrag = { _, dragAmount -> offset += dragAmount }
+                            onDrag = { _, dragAmount ->
+                                val newOffset = offset + dragAmount
+                                offset = Offset(newOffset.x, 0f)
+                            }
                         )
                     }
                 } else {
@@ -387,6 +398,7 @@ private fun SwipeIndicators(
         SwipeDirection.RIGHT -> {
             Box(
                 modifier = modifier
+                    .fillMaxSize()
                     .alpha(swipeProgress * 0.8f)
                     .background(
                         Brush.radialGradient(
@@ -400,10 +412,9 @@ private fun SwipeIndicators(
                     painterResource(Res.drawable.dada_like_swipe),
                     contentDescription = "Like",
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp)
+                        .fillMaxSize(.85f)
                         .alpha(swipeProgress)
-                        .scale(0.8f + swipeProgress * 0.2f)
+                        .scale((0.6f + swipeProgress * 0.5f).coerceAtMost(1f))
                 )
             }
         }
@@ -411,6 +422,7 @@ private fun SwipeIndicators(
         SwipeDirection.LEFT -> {
             Box(
                 modifier = modifier
+                    .fillMaxSize()
                     .alpha(swipeProgress * 0.8f)
                     .background(
                         Brush.radialGradient(
@@ -427,21 +439,13 @@ private fun SwipeIndicators(
                     painterResource(Res.drawable.tuda_dislike_swipe),
                     contentDescription = "Dislike",
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp)
+                        .fillMaxSize(.85f)
                         .alpha(swipeProgress)
-                        .scale(0.8f + swipeProgress * 0.2f)
+                        .scale((0.6f + swipeProgress * 0.5f).coerceAtMost(1f))
                 )
             }
         }
 
         else -> {}
     }
-}
-
-/**
- * Enum для направления свайпа
- */
-enum class SwipeDirection {
-    LEFT, RIGHT, NONE
 }

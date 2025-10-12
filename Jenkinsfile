@@ -13,6 +13,10 @@ pipeline {
         TEST_OPTS = "-Dorg.gradle.workers.max=1 -Dkotlin.compiler.execution.strategy=in-process"
         GRADLE_OPTS = "-Dfile.encoding=UTF-8 -Xmx512m"
         APP_VERSION = "0.0.${BUILD_NUMBER}"
+        // iOS environment variables
+        IOS_TEAM_ID = "${env.IOS_TEAM_ID ?: ''}"
+        IOS_BUNDLE_ID = "ru.dada.tuda.DADATUDA"
+        IOS_APP_NAME = "DADATUDA"
     }
     stages {
         stage('Setup Agent') {
@@ -23,10 +27,10 @@ pipeline {
                     echo "RAM total: $(awk '/MemTotal/ {printf \"%.2f GB\\n\", $2/1024/1024}' /proc/meminfo)" || true
                     echo "CPU cores: $(grep -c ^processor /proc/cpuinfo)" || true
                     echo "CPU cores: $(nproc)" || true
-                    
+
                     java -version
                     echo "JAVA_HOME: $JAVA_HOME"
-                    
+
                     '''
                   	sh '''
                     if [ ! -f /swapfile ]; then
@@ -42,26 +46,70 @@ pipeline {
                 }
             }
         }
-        stage('Setup Android SDK') {
-            steps {
-                script {
-                    sh '''
-                    if [ -d "$ANDROID_HOME" ]; then rm -rf "$ANDROID_HOME"; fi
-                    mkdir -p $ANDROID_HOME
-                    wget --no-verbose --output-document=$ANDROID_HOME/cmdline-tools.zip \
-                        https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_SDK_TOOLS}_latest.zip
-                    unzip -q -d "$ANDROID_HOME/cmdline-tools" "$ANDROID_HOME/cmdline-tools.zip"
-                    rm -rf "$ANDROID_HOME/cmdline-tools/tools"
-                    mv -T "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/tools"
-                    export PATH=$PATH:$ANDROID_HOME/cmdline-tools/tools/bin
-                    yes | sdkmanager --licenses > /dev/null || true
-                    sdkmanager "platforms;android-${ANDROID_COMPILE_SDK}"
-                    sdkmanager "platform-tools"
-                    sdkmanager "build-tools;${ANDROID_BUILD_TOOLS}"
-                    '''
+
+        stage('Setup Development Environment') {
+            parallel {
+                stage('Setup Android SDK') {
+                    steps {
+                        script {
+                            sh '''
+                            if [ -d "$ANDROID_HOME" ]; then rm -rf "$ANDROID_HOME"; fi
+                            mkdir -p $ANDROID_HOME
+                            wget --no-verbose --output-document=$ANDROID_HOME/cmdline-tools.zip \
+                                https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_SDK_TOOLS}_latest.zip
+                            unzip -q -d "$ANDROID_HOME/cmdline-tools" "$ANDROID_HOME/cmdline-tools.zip"
+                            rm -rf "$ANDROID_HOME/cmdline-tools/tools"
+                            mv -T "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/tools"
+                            export PATH=$PATH:$ANDROID_HOME/cmdline-tools/tools/bin
+                            yes | sdkmanager --licenses > /dev/null || true
+                            sdkmanager "platforms;android-${ANDROID_COMPILE_SDK}"
+                            sdkmanager "platform-tools"
+                            sdkmanager "build-tools;${ANDROID_BUILD_TOOLS}"
+                            '''
+                        }
+                    }
+                }
+
+                stage('Setup iOS Environment') {
+                    when {
+                        expression {
+                            return env.NODE_NAME?.contains('mac') ||
+                                   sh(script: 'uname', returnStdout: true).trim() == 'Darwin'
+                        }
+                    }
+                    steps {
+                        script {
+                            sh '''
+                            echo "==> Проверка среды разработки iOS..."
+
+                            # Проверяем наличие Xcode
+                            if command -v xcodebuild >/dev/null 2>&1; then
+                                echo "✅ Xcode найден"
+                                xcodebuild -version
+                            else
+                                echo "❌ Xcode не найден"
+                                exit 1
+                            fi
+
+                            # Проверяем доступные симуляторы
+                            echo "==> Доступные симуляторы iOS:"
+                            xcrun simctl list devices available | grep -E "(iPhone|iPad)" | head -5
+
+                            # Проверяем CocoaPods
+                            if command -v pod >/dev/null 2>&1; then
+                                echo "✅ CocoaPods найден"
+                                pod --version
+                            else
+                                echo "ℹ️ CocoaPods не найден, устанавливаем..."
+                                sudo gem install cocoapods || gem install cocoapods --user-install
+                            fi
+                            '''
+                        }
+                    }
                 }
             }
         }
+
         stage('Clean and Prepare') {
             steps {
                 script {
@@ -72,21 +120,106 @@ pipeline {
                 }
             }
         }
-        stage('Build') {
+
+        stage('Build Multiplatform') {
+            parallel {
+                stage('Build Android') {
+                    steps {
+                        script {
+                            sh '''
+                            ./gradlew clean assembleRelease \
+                                --no-daemon \
+                                --build-cache \
+                                --stacktrace \
+                                --info \
+                                --max-workers=2 \
+                                -Dkotlin.compiler.execution.strategy=in-process \
+                                -Dorg.gradle.testing.maxParallelForks=1 \
+                                -Pandroid.testOptions.unitTests.all.maxParallelForks=1\
+                                -PversName=${APP_VERSION} \
+                                -PversCode=${BUILD_NUMBER}
+                            '''
+                        }
+                    }
+                }
+
+                stage('Build iOS Framework') {
+                    when {
+                        expression {
+                            return env.NODE_NAME?.contains('mac') ||
+                                   sh(script: 'uname', returnStdout: true).trim() == 'Darwin'
+                        }
+                    }
+                    steps {
+                        script {
+                            sh '''
+                            echo "==> Сборка iOS XCFramework..."
+
+                            ./gradlew :composeApp:assembleXCFramework \
+                                --no-daemon \
+                                --build-cache \
+                                --stacktrace \
+                                --info \
+                                --max-workers=2 \
+                                -Dkotlin.compiler.execution.strategy=in-process \
+                                -PversName=${APP_VERSION} \
+                                -PversCode=${BUILD_NUMBER}
+
+                            echo "✅ XCFramework собран"
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build iOS App') {
+            when {
+                expression {
+                    return env.NODE_NAME?.contains('mac') ||
+                           sh(script: 'uname', returnStdout: true).trim() == 'Darwin'
+                }
+            }
             steps {
                 script {
                     sh '''
-                    ./gradlew clean assembleRelease \
-                        --no-daemon \
-                        --build-cache \
-                        --stacktrace \
-                        --info \
-                        --max-workers=2 \
-                        -Dkotlin.compiler.execution.strategy=in-process \
-                        -Dorg.gradle.testing.maxParallelForks=1 \
-                        -Pandroid.testOptions.unitTests.all.maxParallelForks=1\
-                        -PversName=${APP_VERSION} \
-                        -PversCode=${BUILD_NUMBER}
+                    echo "==> Сборка iOS приложения..."
+
+                    cd iosApp
+
+                    # Обновляем версию в конфигурации
+                    echo "CURRENT_PROJECT_VERSION=${BUILD_NUMBER}" > Configuration/Config.xcconfig
+                    echo "MARKETING_VERSION=${APP_VERSION}" >> Configuration/Config.xcconfig
+                    echo "TEAM_ID=${IOS_TEAM_ID}" >> Configuration/Config.xcconfig
+                    echo "PRODUCT_NAME=${IOS_APP_NAME}" >> Configuration/Config.xcconfig
+                    echo "PRODUCT_BUNDLE_IDENTIFIER=${IOS_BUNDLE_ID}\${TEAM_ID}" >> Configuration/Config.xcconfig
+
+                    echo "==> Сборка для симулятора..."
+                    xcodebuild -project iosApp.xcodeproj \
+                        -scheme iosApp \
+                        -sdk iphonesimulator \
+                        -configuration Release \
+                        -derivedDataPath ./DerivedData \
+                        clean build \
+                        CODE_SIGNING_ALLOWED=NO \
+                        ONLY_ACTIVE_ARCH=NO
+
+                    echo "==> Сборка архива для устройств (если есть сертификаты)..."
+                    if [ -n "$IOS_TEAM_ID" ]; then
+                        xcodebuild -project iosApp.xcodeproj \
+                            -scheme iosApp \
+                            -sdk iphoneos \
+                            -configuration Release \
+                            -derivedDataPath ./DerivedData \
+                            -archivePath ./build/${IOS_APP_NAME}.xcarchive \
+                            clean archive \
+                            DEVELOPMENT_TEAM="$IOS_TEAM_ID" || echo "⚠️ Не удалось создать архив для устройств"
+                    else
+                        echo "ℹ️ Team ID не установлен, пропускаем сборку для устройств"
+                    fi
+
+                    cd ..
+                    echo "✅ Сборка iOS завершена"
                     '''
                 }
             }
@@ -118,17 +251,68 @@ pipeline {
                 }
             }
         }
-        stage('Archive APK') {
-            steps {
-                archiveArtifacts artifacts: '**/*.apk', fingerprint: true
-            }
-        }
-        stage('Archive AAB') {
-            steps {
-                archiveArtifacts artifacts: '**/*.aab', fingerprint: true
-            }
-        }
 
+        stage('Archive Artifacts') {
+            parallel {
+                stage('Archive Android APK') {
+                    steps {
+                        archiveArtifacts artifacts: '**/*.apk', fingerprint: true, allowEmptyArchive: true
+                    }
+                }
+
+                stage('Archive Android AAB') {
+                    steps {
+                        archiveArtifacts artifacts: '**/*.aab', fingerprint: true, allowEmptyArchive: true
+                    }
+                }
+
+                stage('Archive iOS Artifacts') {
+                    when {
+                        expression {
+                            return env.NODE_NAME?.contains('mac') ||
+                                   sh(script: 'uname', returnStdout: true).trim() == 'Darwin'
+                        }
+                    }
+                    steps {
+                        script {
+                            sh '''
+                            echo "==> Архивирование iOS артефактов..."
+
+                            # Создаем директорию для iOS артефактов
+                            mkdir -p ios-artifacts
+
+                            # Копируем XCFramework
+                            if [ -d "composeApp/build/XCFrameworks" ]; then
+                                cp -r composeApp/build/XCFrameworks ios-artifacts/
+                                echo "✅ XCFramework скопирован"
+                            fi
+
+                            # Копируем симуляторную сборку
+                            if [ -d "iosApp/DerivedData/Build/Products/Release-iphonesimulator" ]; then
+                                cp -r "iosApp/DerivedData/Build/Products/Release-iphonesimulator" ios-artifacts/
+                                echo "✅ Симуляторная сборка скопирована"
+                            fi
+
+                            # Копируем архив если есть
+                            if [ -f "iosApp/build/${IOS_APP_NAME}.xcarchive" ]; then
+                                cp -r "iosApp/build/${IOS_APP_NAME}.xcarchive" ios-artifacts/
+                                echo "✅ Архив скопирован"
+                            fi
+
+                            # Создаем tar архив для удобства
+                            if [ -d "ios-artifacts" ] && [ "$(ls -A ios-artifacts)" ]; then
+                                tar -czf ios-artifacts-${BUILD_NUMBER}.tar.gz ios-artifacts/
+                                echo "✅ Создан архив ios-artifacts-${BUILD_NUMBER}.tar.gz"
+                            fi
+                            '''
+
+                            archiveArtifacts artifacts: 'ios-artifacts/**/*', fingerprint: true, allowEmptyArchive: true
+                            archiveArtifacts artifacts: 'ios-artifacts-*.tar.gz', fingerprint: true, allowEmptyArchive: true
+                        }
+                    }
+                }
+            }
+        }
 
         stage('Deploy to RuStore') {
             when {
@@ -151,32 +335,6 @@ pipeline {
                 APP_NAME="DADA-TUDA"                 # TODO: заменить на переменную из CI
                 APP_TYPE="MAIN"
   				echo "сохраненный VERSION_ID=${VERSION_ID}"
-
-                echo "==> Обновление версий в Info.plist"
-                INFO_PLIST="iosApp/iosApp/Info.plist"
-                echo "Использую APP_VERSION=${APP_VERSION} BUILD_NUMBER=${BUILD_NUMBER}"
-                if [ ! -f "$INFO_PLIST" ]; then
-                  echo "❌ Info.plist не найден по пути $INFO_PLIST"; exit 1
-                fi
-                set +e
-                /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST" >/dev/null 2>&1
-                HAS_SHORT=$?
-                /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST" >/dev/null 2>&1
-                HAS_BUILD=$?
-                set -e
-                if [ $HAS_SHORT -ne 0 ]; then
-                  /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string ${APP_VERSION}" "$INFO_PLIST"
-                else
-                  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "$INFO_PLIST"
-                fi
-                if [ $HAS_BUILD -ne 0 ]; then
-                  /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUMBER}" "$INFO_PLIST"
-                else
-                  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" "$INFO_PLIST"
-                fi
-                echo "Обновлённый Info.plist (фрагмент):"
-                /usr/libexec/PlistBuddy -c Print "$INFO_PLIST" | sed -n '1,80p'
-
                 APK_PATH=$(find . -name "*.aab" | grep release | head -n 1)
 
                 if [ -z "$APK_PATH" ]; then
@@ -237,8 +395,6 @@ pipeline {
             }
         }
 
-
-
         stage('Deploy') {
             when {
                 anyOf {
@@ -266,7 +422,7 @@ pipeline {
         lock 'gradle'
         skipStagesAfterUnstable()
         disableConcurrentBuilds()
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 45, unit: 'MINUTES')  // Увеличиваем таймаут для iOS сборки
     }
     post {
         always {
