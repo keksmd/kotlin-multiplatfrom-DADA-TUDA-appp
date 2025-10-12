@@ -1,4 +1,4 @@
-name: iOS starter workflow
+name: iOS CI
 
 on:
   push:
@@ -6,39 +6,95 @@ on:
   pull_request:
     branches: [ "develop" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
-    name: Build and Test default scheme using any available iPhone simulator
+  ios:
+    name: Build & Test (Simulator)
     runs-on: macos-latest
+
+    env:
+      APP_VERSION: 0.0.${{ github.run_number }}
+      BUILD_NUMBER: ${{ github.run_number }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ---- KMP (опционально) ----
+      - name: Set up JDK 17 (for KMP)
+        if: ${{ hashFiles('gradlew') != '' }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle cache
+        if: ${{ hashFiles('gradlew') != '' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            .gradle/caches
+            .gradle/wrapper
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build KMP XCFramework (:shared)
+        if: ${{ hashFiles('gradlew') != '' }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :shared:clean :shared:assembleXCFramework \
+            --no-daemon --stacktrace -Dkotlin.compiler.execution.strategy=in-process
+          ls -lah shared/build/XCFrameworks/release || true
+
+      # ---- CocoaPods (опционально) ----
+      - name: Install CocoaPods
+        if: ${{ hashFiles('iosApp/Podfile') != '' }}
+        run: |
+          cd iosApp
+          pod install --repo-update
+
+      # ---- (опц.) Бамп версий в Info.plist ----
+      - name: Bump versions in Info.plist
+        if: ${{ hashFiles('iosApp/iosApp/Info.plist') != '' }}
+        run: |
+          INFO_PLIST="iosApp/iosApp/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "$INFO_PLIST" || \
+          /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string ${APP_VERSION}" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" "$INFO_PLIST" || \
+          /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUMBER}" "$INFO_PLIST"
+
+      # ---- Build & Test на симуляторе (твоя логика) ----
       - name: Set Default Scheme
         run: |
           scheme_list=$(xcodebuild -list -json | tr -d "\n")
-          default=$(echo $scheme_list | ruby -e "require 'json'; puts JSON.parse(STDIN.gets)['project']['targets'][0]")
-          echo $default | cat >default
-          echo Using default scheme: $default
-      - name: Build
+          default=$(echo $scheme_list | ruby -e "require 'json'; j=JSON.parse(STDIN.gets); puts (j['project']||j['workspace'])['targets'][0]")
+          echo $default > default
+          echo "Using default scheme: $default"
+
+      - name: Build (for testing)
         env:
           scheme: ${{ 'default' }}
           platform: ${{ 'iOS Simulator' }}
         run: |
-          # xcrun xctrace returns via stderr, not the expected stdout (see https://developer.apple.com/forums/thread/663959)
-          device=`xcrun xctrace list devices 2>&1 | grep -oE 'iPhone.*?[^\(]+' | head -1 | awk '{$1=$1;print}' | sed -e "s/ Simulator$//"`
-          if [ $scheme = default ]; then scheme=$(cat default); fi
-          if [ "`ls -A | grep -i \\.xcworkspace\$`" ]; then filetype_parameter="workspace" && file_to_build="`ls -A | grep -i \\.xcworkspace\$`"; else filetype_parameter="project" && file_to_build="`ls -A | grep -i \\.xcodeproj\$`"; fi
-          file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
+          device=$(xcrun xctrace list devices 2>&1 | grep -oE 'iPhone.*?[^\(]+' | head -1 | awk '{$1=$1;print}' | sed -e "s/ Simulator$//")
+          if [ "$scheme" = default ]; then scheme=$(cat default); fi
+          if ls -A | grep -qi '\.xcworkspace$'; then filetype_parameter="workspace" && file_to_build="$(ls -A | grep -i '\.xcworkspace$')"; else filetype_parameter="project" && file_to_build="$(ls -A | grep -i '\.xcodeproj$')"; fi
+          file_to_build=$(echo "$file_to_build" | awk '{$1=$1;print}')
           xcodebuild build-for-testing -scheme "$scheme" -"$filetype_parameter" "$file_to_build" -destination "platform=$platform,name=$device"
-      - name: Test
+
+      - name: Test (without building)
         env:
           scheme: ${{ 'default' }}
           platform: ${{ 'iOS Simulator' }}
         run: |
-          # xcrun xctrace returns via stderr, not the expected stdout (see https://developer.apple.com/forums/thread/663959)
-          device=`xcrun xctrace list devices 2>&1 | grep -oE 'iPhone.*?[^\(]+' | head -1 | awk '{$1=$1;print}' | sed -e "s/ Simulator$//"`
-          if [ $scheme = default ]; then scheme=$(cat default); fi
-          if [ "`ls -A | grep -i \\.xcworkspace\$`" ]; then filetype_parameter="workspace" && file_to_build="`ls -A | grep -i \\.xcworkspace\$`"; else filetype_parameter="project" && file_to_build="`ls -A | grep -i \\.xcodeproj\$`"; fi
-          file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
+          device=$(xcrun xctrace list devices 2>&1 | grep -oE 'iPhone.*?[^\(]+' | head -1 | awk '{$1=$1;print}' | sed -e "s/ Simulator$//")
+          if [ "$scheme" = default ]; then scheme=$(cat default); fi
+          if ls -A | grep -qi '\.xcworkspace$'; then filetype_parameter="workspace" && file_to_build="$(ls -A | grep -i '\.xcworkspace$')"; else filetype_parameter="project" && file_to_build="$(ls -A | grep -i '\.xcodeproj$')"; fi
+          file_to_build=$(echo "$file_to_build" | awk '{$1=$1;print}')
           xcodebuild test-without-building -scheme "$scheme" -"$filetype_parameter" "$file_to_build" -destination "platform=$platform,name=$device"
