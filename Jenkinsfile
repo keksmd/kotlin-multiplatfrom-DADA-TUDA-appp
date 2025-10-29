@@ -12,7 +12,7 @@ pipeline {
       	//GRADLE_OPTS = "-XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8 -Xmx1024m"
         TEST_OPTS = "-Dorg.gradle.workers.max=1 -Dkotlin.compiler.execution.strategy=in-process"
         // Дополнительная память Gradle/Android Lint, иначе lintVital может завершить демон
-        GRADLE_OPTS = "-Dfile.encoding=UTF-8 -Xms2048m -Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+HeapDumpOnOutOfMemoryError"
+        GRADLE_OPTS = "-Dfile.encoding=UTF-8 -Xms3072m -Xmx3072m -XX:MaxMetaspaceSize=2048m -XX:+HeapDumpOnOutOfMemoryError"
         ANDROID_LINT_MAX_HEAP = "3072m"
         APP_VERSION = "0.0.${BUILD_NUMBER}"
         // iOS environment variables
