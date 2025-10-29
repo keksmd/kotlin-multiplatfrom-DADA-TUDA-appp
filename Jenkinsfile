@@ -11,7 +11,8 @@ pipeline {
         //GRADLE_OPTS = "-XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
       	//GRADLE_OPTS = "-XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8 -Xmx1024m"
         TEST_OPTS = "-Dorg.gradle.workers.max=1 -Dkotlin.compiler.execution.strategy=in-process"
-        GRADLE_OPTS = "-Dfile.encoding=UTF-8 -Xmx512m"
+    // Увеличиваем heap для Gradle, иначе одноразовый демон падает во время R8/lint
+    GRADLE_OPTS = "-Dfile.encoding=UTF-8 -Xms512m -Xmx2048m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError"
         APP_VERSION = "0.0.${BUILD_NUMBER}"
         // iOS environment variables
         IOS_TEAM_ID = "${env.IOS_TEAM_ID ?: ''}"

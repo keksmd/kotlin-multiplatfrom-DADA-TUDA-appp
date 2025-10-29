@@ -19,3 +19,5 @@ captures
 cert.pem
 datatuda.jks
 pepk.jar
+.github/copilot-instructions.md
+composeApp/release/*
