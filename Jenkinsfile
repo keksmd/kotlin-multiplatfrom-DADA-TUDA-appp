@@ -114,6 +114,9 @@ pipeline {
             steps {
                 script {
                     sh '''
+                    # Очистка повреждённого кэша Kotlin DSL (когда файл metadata.bin недоступен)
+                    find "$GRADLE_USER_HOME/caches" -mindepth 1 -maxdepth 3 -type d -name "kotlin-dsl" -prune -exec rm -rf {} + || true
+
                     ./gradlew --stop || true
                     ./gradlew clean || true
                     '''
